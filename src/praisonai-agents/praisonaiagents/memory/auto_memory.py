@@ -297,12 +297,11 @@ class AutoMemory:
         if assistant_response:
             text += "\n" + assistant_response
         
-        # Check if already processed
+        # Check if already processed (previews must not consume dedup)
         import hashlib
         text_hash = hashlib.sha256(text.encode()).hexdigest()[:16]
-        if text_hash in self._processed_hashes:
+        if store and text_hash in self._processed_hashes:
             return []
-        self._processed_hashes.add(text_hash)
         
         # Quick filter
         if not self.extractor.should_remember(text):
@@ -312,7 +311,9 @@ class AutoMemory:
         memories = self.extractor.extract(text)
         
         if store and memories:
+            # Only consume the dedup hash once storage completes successfully
             self._store_memories(memories)
+            self._processed_hashes.add(text_hash)
         
         return memories
     
