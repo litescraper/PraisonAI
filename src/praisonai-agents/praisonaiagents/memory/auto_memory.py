@@ -16,6 +16,7 @@ when explicitly enabled to avoid impacting performance.
 """
 
 import re
+import threading
 from praisonaiagents._logging import get_logger
 from typing import Any, Dict, List, Optional, Callable, TYPE_CHECKING
 
@@ -269,8 +270,11 @@ class AutoMemory:
             verbose=verbose
         )
         
-        # Track what we've already processed to avoid duplicates
+        # Track what we've already processed to avoid duplicates. The lock keeps
+        # the dedup check and store atomic so overlapping calls (shared agent in
+        # worker threads) with the same interaction store exactly once.
         self._processed_hashes: set = set()
+        self._store_lock = threading.Lock()
     
     def process_interaction(
         self,
@@ -297,7 +301,8 @@ class AutoMemory:
         if assistant_response:
             text += "\n" + assistant_response
         
-        # Check if already processed (previews must not consume dedup)
+        # Previews must not consume dedup, so only the hash is checked (not
+        # recorded) when store is False.
         import hashlib
         text_hash = hashlib.sha256(text.encode()).hexdigest()[:16]
         if store and text_hash in self._processed_hashes:
@@ -307,13 +312,18 @@ class AutoMemory:
         if not self.extractor.should_remember(text):
             return []
         
-        # Extract memories
+        # Extract memories (no side effects, safe outside the store lock)
         memories = self.extractor.extract(text)
         
         if store and memories:
-            # Only consume the dedup hash once storage completes successfully
-            self._store_memories(memories)
-            self._processed_hashes.add(text_hash)
+            # Serialise the check-store-record so overlapping calls with the same
+            # interaction store exactly once; the hash is only recorded after
+            # storage completes, so a failed store leaves it free for retry.
+            with self._store_lock:
+                if text_hash in self._processed_hashes:
+                    return memories
+                self._store_memories(memories)
+                self._processed_hashes.add(text_hash)
         
         return memories
     
