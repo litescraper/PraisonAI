@@ -1234,3 +1234,7 @@ See [MCP docs](https://docs.praison.ai/docs/mcp/transports) for all transport op
     <a href="https://linkedin.com/in/mervinpraison">💼 LinkedIn</a>
   </p>
 </div>
+
+## Search endpoint configuration
+
+Support any Serper.dev-compatible endpoint (like litescrape.com, serpbase.dev, serpensapi.org, and others). The delegated `praisonai-tools` Serper tool supports `SERPER_BASE_URL` for the provider base URL and `SERPER_API_KEY` for its API key. Omit the search-type route from the base URL; the tool appends it automatically.
